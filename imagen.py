@@ -11,6 +11,8 @@ import asyncio
 from google import genai
 from google.genai import types
 
+from .utils import tensor_to_pil, pil_to_base64, base64_to_tensor
+
 class ImagenT2ICallerNode:
     """
     A custom node that calls the Imagen API to generate images from a prompt.
@@ -102,11 +104,7 @@ class ImagenT2ICallerNode:
         image_tensors = []
         for image in api_response.generated_images:
             pil_image = image.image._pil_image.convert("RGBA")
-            image_array = np.array(pil_image).astype(np.float32) / 255.0
-            
-            # Convert NumPy array to a PyTorch tensor (H, W, C) -> (1, H, W, C)
-            image_tensor = torch.from_numpy(image_array)[None,]
-            image_tensors.append(image_tensor)
+            image_tensors.append(base64_to_tensor(pil_to_base64(pil_image)))
 
         # Stack all tensors into a single batch tensor
         batch_tensor = torch.cat(image_tensors, 0)

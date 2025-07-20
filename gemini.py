@@ -8,10 +8,9 @@ from google.genai.types import Part
 import io
 import asyncio
 
+from .utils import tensor_to_pil
+
 class GeminiCallerNode:
-    """
-    A custom node that calls the Gemini API to generate text from a prompt and optional images.
-    """
     def __init__(self):
         self.client = None
 
@@ -57,22 +56,6 @@ class GeminiCallerNode:
 
     CATEGORY = "Vertex AI"
 
-    def tensor_to_pil(self, tensor):
-        """
-        Converts a PyTorch tensor to a PIL Image.
-        """
-        if tensor is None:
-            return None
-        # Convert tensor to numpy array
-        image_np = tensor.squeeze().cpu().numpy()
-        # Denormalize if necessary (assuming tensor is in [0, 1] range)
-        if image_np.max() <= 1.0:
-            image_np = (image_np * 255).astype(np.uint8)
-        else:
-            image_np = image_np.astype(np.uint8)
-        # Convert to PIL Image
-        return Image.fromarray(image_np)
-
     async def generate_text(self, project_id, region, model_name, prompt, system_instruction=None, image1=None, image2=None, image3=None):
         """
         Generates text using the Gemini API based on a prompt and optional images.
@@ -88,7 +71,7 @@ class GeminiCallerNode:
         images = [image1, image2, image3]
         for img_tensor in images:
             if img_tensor is not None:
-                pil_img = self.tensor_to_pil(img_tensor)
+                pil_img = tensor_to_pil(img_tensor)
                 img_byte_arr = io.BytesIO()
                 pil_img.save(img_byte_arr, format='PNG')
                 img_bytes = img_byte_arr.getvalue()

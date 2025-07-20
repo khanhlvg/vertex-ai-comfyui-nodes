@@ -5,20 +5,31 @@ from PIL import Image
 import base64
 import io
 import os
+import random
 
 from google import genai
 from google.genai import types
 
 class ImagenT2ICallerNode:
     """
-    A custom node that takes a prompt, aspect ratio, and number of images,
-    calls an external API to generate images, and returns them.
+    A custom node that calls the Imagen API to generate images from a prompt.
     """
     # Define the input types for your node
     @classmethod
     def INPUT_TYPES(s):
+        """
+        Defines the input types for the Imagen node.
+        """
         return {
             "required": {
+                "project_id": ("STRING", {
+                    "multiline": False,
+                    "default": os.environ.get("GOOGLE_CLOUD_PROJECT")
+                }),
+                "location": ("STRING", {
+                    "multiline": False,
+                    "default": os.environ.get("GOOGLE_CLOUD_REGION", "us-central1")
+                }),
                 "prompt": ("STRING", {
                     "multiline": True,
                     "default": "A majestic lion in the savannah, 4k, high detail"
@@ -35,6 +46,14 @@ class ImagenT2ICallerNode:
                     "imagen-4.0-ultra-generate-preview-06-06", 
                     "imagen-4.0-fast-generate-preview-06-06", 
                     ],),
+                "seed": ("INT", {
+                    "default": random.randint(0, 4294967295),
+                    "min": 0,
+                    "max": 4294967295
+                }),
+                "safety_filter_level": (["BLOCK_ONLY_HIGH", "BLOCK_MEDIUM_AND_ABOVE", "BLOCK_LOW_AND_ABOVE", "BLOCK_NONE"],),
+                "person_generation": (["ALLOW_ALL", "ALLOW_ADULT", "DONT_ALLOW"],),
+                "enhancePrompt": ("BOOLEAN", {"default": True}),
             },
         }
 
@@ -46,25 +65,30 @@ class ImagenT2ICallerNode:
     FUNCTION = "call_image_api"
 
     # Define the category for your node
-    CATEGORY = "API"
+    CATEGORY = "Vertex AI"
 
     def __init__(self):
-        PROJECT_ID = str(os.environ.get("GOOGLE_CLOUD_PROJECT", "vertex-generative-media"))
-        LOCATION = os.environ.get("GOOGLE_CLOUD_REGION", "us-central1")
-        self.client = genai.Client(vertexai=True, project=PROJECT_ID, location=LOCATION)
+        self.client = None
 
-    def call_image_api(self, prompt, model, num_images, aspect_ratio):
+    def call_image_api(self, project_id, location, prompt, model, num_images, aspect_ratio, seed, safety_filter_level, person_generation, enhancePrompt):
         """
         This function is called when the node is executed.
         It sends the parameters to the specified API URL and returns the generated images.
         """
-        
+        if self.client is None:
+            self.client = genai.Client(vertexai=True, project=project_id, location=location)
+
         api_response = self.client.models.generate_images(
             model=model,
             prompt=prompt,
             config=types.GenerateImagesConfig(
                 aspect_ratio=aspect_ratio,
                 number_of_images=num_images,
+                seed=seed,
+                safety_filter_level=safety_filter_level,
+                person_generation=person_generation,
+                enhance_prompt=enhancePrompt,
+                add_watermark=False,
             ),
         )
         

@@ -40,3 +40,11 @@ Before using these custom nodes, you need to set up your environment to authenti
     To make these variables persistent across terminal sessions, you can add these lines to your shell's startup file (e.g., `~/.bashrc`, `~/.zshrc`).
 
 Once you have completed these steps, you can start ComfyUI, and the Vertex AI custom nodes will be able to access the APIs.
+
+## Running Unit Tests
+
+To run the unit tests, run the following command:
+
+```bash
+python -m unittest discover
+```

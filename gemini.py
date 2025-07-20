@@ -6,6 +6,7 @@ from google import genai
 from google.genai import types
 from google.genai.types import Part
 import io
+import asyncio
 
 class GeminiCallerNode:
     """
@@ -72,7 +73,7 @@ class GeminiCallerNode:
         # Convert to PIL Image
         return Image.fromarray(image_np)
 
-    def generate_text(self, project_id, region, model_name, prompt, system_instruction=None, image1=None, image2=None, image3=None):
+    async def generate_text(self, project_id, region, model_name, prompt, system_instruction=None, image1=None, image2=None, image3=None):
         """
         Generates text using the Gemini API based on a prompt and optional images.
         """
@@ -93,7 +94,8 @@ class GeminiCallerNode:
                 img_bytes = img_byte_arr.getvalue()
                 contents.append(Part.from_bytes(data=img_bytes, mime_type="image/png"))
 
-        response = self.client.models.generate_content(
+        response = await asyncio.to_thread(
+            self.client.models.generate_content,
             model=model_name,
             contents=contents,
             config=config,

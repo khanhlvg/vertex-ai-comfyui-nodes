@@ -1,3 +1,5 @@
+> **Disclaimer:** This is a personal project and is not an official Google product.
+
 # vertex-ai-comfyui-nodes
 
 Custom nodes for ComfyUI that provide access to Google Cloud's Vertex AI generative models, including:

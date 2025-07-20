@@ -6,6 +6,7 @@ import base64
 import io
 import os
 import random
+import asyncio
 
 from google import genai
 from google.genai import types
@@ -70,7 +71,7 @@ class ImagenT2ICallerNode:
     def __init__(self):
         self.client = None
 
-    def call_image_api(self, project_id, location, prompt, model, num_images, aspect_ratio, seed, safety_filter_level, person_generation, enhancePrompt):
+    async def call_image_api(self, project_id, location, prompt, model, num_images, aspect_ratio, seed, safety_filter_level, person_generation, enhancePrompt):
         """
         This function is called when the node is executed.
         It sends the parameters to the specified API URL and returns the generated images.
@@ -78,7 +79,8 @@ class ImagenT2ICallerNode:
         if self.client is None:
             self.client = genai.Client(vertexai=True, project=project_id, location=location)
 
-        api_response = self.client.models.generate_images(
+        api_response = await asyncio.to_thread(
+            self.client.models.generate_images,
             model=model,
             prompt=prompt,
             config=types.GenerateImagesConfig(

@@ -6,6 +6,7 @@ from PIL import Image
 import base64
 import io
 from google.cloud import aiplatform
+import asyncio
 
 class ImagenProductRecontextNode:
     """
@@ -81,7 +82,7 @@ class ImagenProductRecontextNode:
         image_array = np.array(pil_image).astype(np.float32) / 255.0
         return torch.from_numpy(image_array)[None,]
 
-    def generate_contextualized_image(self, project_id, location, prompt, image1, image2=None, image3=None, productDescription=None, sampleCount=1, seed=0, safetySetting="block_low_and_above", personGeneration="allow_adult"):
+    async def generate_contextualized_image(self, project_id, location, prompt, image1, image2=None, image3=None, productDescription=None, sampleCount=1, seed=0, safetySetting="block_low_and_above", personGeneration="allow_adult"):
         aiplatform.init(project=project_id, location=location)
         api_regional_endpoint = f"{location}-aiplatform.googleapis.com"
         client_options = {"api_endpoint": api_regional_endpoint}
@@ -118,7 +119,7 @@ class ImagenProductRecontextNode:
         instances.append(instance)
 
         model_endpoint = f"projects/{project_id}/locations/{location}/publishers/google/models/imagen-product-recontext-preview-06-30"
-        response = client.predict(endpoint=model_endpoint, instances=instances, parameters=parameters)
+        response = await asyncio.to_thread(client.predict, endpoint=model_endpoint, instances=instances, parameters=parameters)
 
         image_tensors = []
         for prediction in response.predictions:

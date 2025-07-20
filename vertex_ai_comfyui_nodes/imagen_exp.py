@@ -49,8 +49,8 @@ class ImagenProductRecontextNode:
                     "min": 0,
                     "max": 4294967295
                 }),
-                "safetySetting": (["BLOCK_LOW_AND_ABOVE", "BLOCK_MEDIUM_AND_ABOVE", "BLOCK_ONLY_HIGH", "BLOCK_NONE"],),
-                "personGeneration": (["DONT_ALLOW", "ALLOW_ADULT", "ALLOW_ALL"],)
+                "safetySetting": (["BLOCK_ONLY_HIGH", "BLOCK_MEDIUM_AND_ABOVE", "BLOCK_LOW_AND_ABOVE", "BLOCK_NONE"],),
+                "personGeneration": (["ALLOW_ALL", "ALLOW_ADULT", "DONT_ALLOW"],)
             }
         }
 
@@ -138,7 +138,7 @@ class VirtualTryOnNode:
                     "max": 4,
                     "step": 1
                 }),
-                "safetySetting": (["BLOCK_LOW_AND_ABOVE", "BLOCK_MEDIUM_AND_ABOVE", "BLOCK_ONLY_HIGH", "BLOCK_NONE"],),
+                "safetySetting": (["BLOCK_ONLY_HIGH", "BLOCK_MEDIUM_AND_ABOVE", "BLOCK_LOW_AND_ABOVE", "BLOCK_NONE"],),
                 "personGeneration": (["ALLOW_ALL", "ALLOW_ADULT"],)
             }
         }

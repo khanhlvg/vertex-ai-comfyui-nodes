@@ -138,6 +138,11 @@ class VirtualTryOnNode:
                     "max": 4,
                     "step": 1
                 }),
+                "seed": ("INT", {
+                    "default": random.randint(0, 4294967295),
+                    "min": 0,
+                    "max": 4294967295
+                }),
                 "safetySetting": (["BLOCK_ONLY_HIGH", "BLOCK_MEDIUM_AND_ABOVE", "BLOCK_LOW_AND_ABOVE", "BLOCK_NONE"],),
                 "personGeneration": (["ALLOW_ALL", "ALLOW_ADULT"],)
             }
@@ -150,7 +155,7 @@ class VirtualTryOnNode:
 
     CATEGORY = "Vertex AI"
 
-    async def virtual_try_on(self, project_id, location, person_image, product_image, sampleCount=1, safetySetting="block_low_and_above", personGeneration="allow_adult"):
+    async def virtual_try_on(self, project_id, location, person_image, product_image, sampleCount=1, seed=0, safetySetting="block_low_and_above", personGeneration="allow_adult"):
         aiplatform.init(project=project_id, location=location)
         api_regional_endpoint = f"{location}-aiplatform.googleapis.com"
         client_options = {"api_endpoint": api_regional_endpoint}
@@ -169,7 +174,7 @@ class VirtualTryOnNode:
             }
         ]
 
-        parameters = {"sampleCount": sampleCount}
+        parameters = {"sampleCount": sampleCount, "seed": seed}
         if safetySetting:
             parameters["safetySetting"] = safetySetting
         if personGeneration:

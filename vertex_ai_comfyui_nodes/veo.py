@@ -3,12 +3,13 @@ import random
 import asyncio
 from google import genai
 from google.genai import types
+from google.cloud import storage
 from .utils import tensor_to_temp_image_file, save_video, save_video_for_preview
 import folder_paths
 from comfy.comfy_types import IO
 from comfy_api.input_impl import VideoFromFile
 
-class VeoNode:
+class Veo3Node:
     """
     A custom node that calls the Veo API to generate video from a prompt and an optional image.
     """
@@ -32,7 +33,7 @@ class VeoNode:
             },
             "optional": {
                 "first_frame": ("IMAGE",),
-                "output_file_path": ("STRING", {
+                "output_gcs_uri": ("STRING", {
                     "multiline": False,
                     "default": ""
                 }),
@@ -54,8 +55,8 @@ class VeoNode:
             }
         }
 
-    RETURN_TYPES = ("STRING", IO.VIDEO)
-    RETURN_NAMES = ("video_file", "video")
+    RETURN_TYPES = (IO.VIDEO,)
+    RETURN_NAMES = ("video",)
 
     FUNCTION = "generate_video"
 
@@ -64,19 +65,24 @@ class VeoNode:
     def __init__(self):
         self.client = None
 
-    async def generate_video(self, project_id, location, model, prompt, first_frame=None, output_file_path="", duration_seconds=8, resolution="1080p", enhance_prompt=True, generate_audio=True, person_generation="allow_adult", seed=0):
+    async def generate_video(self, project_id, location, model, prompt, first_frame=None, output_gcs_uri=None, duration_seconds=8, resolution="1080p", enhance_prompt=True, generate_audio=True, person_generation="allow_adult", seed=0):
         if self.client is None:
             self.client = genai.Client(vertexai=True, project=project_id, location=location)
 
-        config = types.GenerateVideosConfig(
-            number_of_videos=1,
-            duration_seconds=duration_seconds,
-            resolution=resolution,
-            person_generation=person_generation,
-            enhance_prompt=enhance_prompt,
-            generate_audio=generate_audio,
-            seed=seed,
-        )
+        config = {
+            "number_of_videos": 1,
+            "duration_seconds": duration_seconds,
+            "resolution": resolution,
+            "person_generation": person_generation,
+            "enhance_prompt": enhance_prompt,
+            "generate_audio": generate_audio,
+            "seed": seed,
+        }
+
+        if output_gcs_uri:
+            config["output_gcs_uri"] = output_gcs_uri
+
+        config = types.GenerateVideosConfig(**config)
 
         image_path = None
         if first_frame is not None:
@@ -111,25 +117,159 @@ class VeoNode:
             raise ValueError(operation.error["message"])
 
         if operation.response:
-            video_paths = []
-            for i, video in enumerate(operation.result.generated_videos):
-                video_bytes = video.video.video_bytes
-                if output_file_path:
-                    video_path = save_video(video_bytes, f"{output_file_path}_{i}.mp4")
-                    video_paths.append(video_path)
-                else:
+            if output_gcs_uri:
+                video_uri = operation.result.generated_videos[0].video.uri
+                
+                storage_client = storage.Client(project=project_id)
+                bucket_name, blob_name = video_uri.replace("gs://", "").split("/", 1)
+                bucket = storage_client.bucket(bucket_name)
+                blob = bucket.blob(blob_name)
+                video_bytes = blob.download_as_bytes()
+
+                video_preview = save_video_for_preview(video_bytes, folder_paths.get_temp_directory())
+                video_object = VideoFromFile(video_preview["full_path"])
+                return (video_object,)
+            else:
+                video_paths = []
+                for i, video in enumerate(operation.result.generated_videos):
+                    video_bytes = video.video.video_bytes
                     video_preview = save_video_for_preview(video_bytes, folder_paths.get_temp_directory())
                     video_paths.append(video_preview["full_path"])
 
-            video_file_path = video_paths[0] if video_paths else None
-            
-            if not video_file_path:
-                return (None, None)
+                video_file_path = video_paths[0] if video_paths else None
+                
+                if not video_file_path:
+                    return (None,)
 
-            video_object = VideoFromFile(video_file_path)
-            return (video_file_path, video_object)
+                video_object = VideoFromFile(video_file_path)
+                return (video_object,)
 
-        return (None, None)
+        return (None,)
+
+class Veo2Node:
+    """
+    A custom node that calls the Veo 2 API to generate video from a prompt and an optional image.
+    """
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "project_id": ("STRING", {
+                    "multiline": False,
+                    "default": os.environ.get("GOOGLE_CLOUD_PROJECT")
+                }),
+                "location": ("STRING", {
+                    "multiline": False,
+                    "default": os.environ.get("GOOGLE_CLOUD_REGION", "us-central1")
+                }),
+                "model": (["veo-2.0-generate-001"],),
+                "prompt": ("STRING", {
+                    "multiline": True,
+                    "default": "A cinematic shot of a panda eating bamboo."
+                }),
+                "output_gcs_uri": ("STRING", {
+                    "multiline": False,
+                    "default": ""
+                }),
+            },
+            "optional": {
+                "first_frame": ("IMAGE",),
+                "duration_seconds": ("INT", {
+                    "default": 8,
+                    "min": 5,
+                    "max": 8,
+                    "step": 1
+                }),
+                "aspect_ratio": (["16:9", "9:16"],),
+                "enhance_prompt": ("BOOLEAN", {"default": True}),
+                "person_generation": (["allow_adult", "dont_allow"],),
+                "seed": ("INT", {
+                    "default": random.randint(0, 4294967295),
+                    "min": 0,
+                    "max": 4294967295
+                }),
+            }
+        }
+
+    RETURN_TYPES = (IO.VIDEO,)
+    RETURN_NAMES = ("video",)
+
+    FUNCTION = "generate_video"
+
+    CATEGORY = "Vertex AI"
+
+    def __init__(self):
+        self.client = None
+
+    async def generate_video(self, project_id, location, model, prompt, output_gcs_uri, first_frame=None, duration_seconds=8, aspect_ratio="16:9", enhance_prompt=True, person_generation="allow_adult", seed=0):
+        if self.client is None:
+            self.client = genai.Client(vertexai=True, project=project_id, location=location)
+
+        config = {
+            "number_of_videos": 1,
+            "duration_seconds": duration_seconds,
+            "aspect_ratio": aspect_ratio,
+            "person_generation": person_generation,
+            "enhance_prompt": enhance_prompt,
+            "seed": seed,
+        }
+
+        if output_gcs_uri:
+            config["output_gcs_uri"] = output_gcs_uri
+
+        config = types.GenerateVideosConfig(**config)
+
+        image_path = None
+        if first_frame is not None:
+            image_path = tensor_to_temp_image_file(first_frame)
+            image_file = types.Image.from_file(location=image_path)
+            operation = await asyncio.to_thread(
+                self.client.models.generate_videos,
+                model=model,
+                image=image_file,
+                config=config,
+            )
+        else:
+            operation = await asyncio.to_thread(
+                self.client.models.generate_videos,
+                model=model,
+                prompt=prompt,
+                config=config,
+            )
+
+        while not operation.done:
+            await asyncio.sleep(15)
+            operation = await asyncio.to_thread(
+                self.client.operations.get,
+                operation
+            )
+
+        if image_path:
+            os.remove(image_path)
+
+        if operation.error:
+            raise ValueError(operation.error["message"])
+
+        if operation.response:
+            if output_gcs_uri:
+                video_uri = operation.result.generated_videos[0].video.uri
+                
+                storage_client = storage.Client(project=project_id)
+                bucket_name, blob_name = video_uri.replace("gs://", "").split("/", 1)
+                bucket = storage_client.bucket(bucket_name)
+                blob = bucket.blob(blob_name)
+                video_bytes = blob.download_as_bytes()
+
+                video_preview = save_video_for_preview(video_bytes, folder_paths.get_temp_directory())
+                video_object = VideoFromFile(video_preview["full_path"])
+                return (video_object,)
+            else:
+                video_bytes = operation.result.generated_videos[0].video.video_bytes
+                video_preview = save_video_for_preview(video_bytes, folder_paths.get_temp_directory())
+                video_object = VideoFromFile(video_preview["full_path"])
+                return (video_object,)
+
+        return (None,)
 
 class VeoPromptWriterNode:
     """
@@ -214,11 +354,13 @@ class VeoPromptWriterNode:
         return (response.text,)
 
 NODE_CLASS_MAPPINGS = {
-    "Veo": VeoNode,
+    "Veo": Veo3Node,
+    "Veo2": Veo2Node,
     "Veo_Prompt_Writer": VeoPromptWriterNode,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "Veo": "Veo 3",
+    "Veo2": "Veo 2",
     "Veo_Prompt_Writer": "Veo Prompt Writer",
 }

@@ -10,7 +10,24 @@ Custom nodes for ComfyUI that provide access to Google Cloud's Vertex AI generat
 *   [Coming] **Chirp API**: For speech-to-text and text-to-speech.
 *   [Coming] **Lyria API**: For music generation.
 
-## Setup
+## Quick Installation
+
+You can install ComfyUI and the Vertex AI custom nodes with a single command. This script will check for dependencies, clone the necessary repositories, and guide you through the authentication process.
+
+```bash
+cd ~/
+bash <(curl -s https://raw.githubusercontent.com/khanhlvg/vertex-ai-comfyui-nodes/main/scripts/install.sh)
+```
+
+Then run ComfyUI.
+
+```bash
+cd ComfyUI
+source venv/bin/activate
+python main.py
+```
+
+## Manual Setup
 
 Before using these custom nodes, you need to set up your environment to authenticate with Google Cloud.
 

@@ -1,3 +1,17 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import os
 import random
 import asyncio
@@ -11,10 +25,21 @@ from comfy_api.input_impl import VideoFromFile
 
 class Veo3Node:
     """
-    A custom node that calls the Veo API to generate video from a prompt and an optional image.
+    A ComfyUI node for generating video from a prompt and an optional image using the Veo 3 API.
+
+    This node supports the latest features of Veo 3, including higher resolution,
+    longer duration, and audio generation. It can take a text prompt and an
+    optional first frame to guide the video generation process.
     """
     @classmethod
     def INPUT_TYPES(s):
+        """
+        Defines the input types for the Veo 3 node.
+
+        This includes required parameters like project ID, location, model, and
+        prompt, as well as optional settings for the first frame, output GCS URI,
+        duration, resolution, and other generation controls.
+        """
         return {
             "required": {
                 "project_id": ("STRING", {
@@ -63,12 +88,42 @@ class Veo3Node:
     CATEGORY = "Vertex AI"
 
     def __init__(self):
+        """
+        Initializes the node by setting the client to None.
+        The client will be created on the first execution.
+        """
         self.client = None
 
     async def generate_video(self, project_id, location, model, prompt, first_frame=None, output_gcs_uri=None, duration_seconds=8, resolution="1080p", enhance_prompt=True, generate_audio=True, person_generation="allow_adult", seed=0):
+        """
+        Generates a video using the Veo 3 API.
+
+        This asynchronous method handles the entire video generation process. It
+        initializes the client, prepares the configuration, and calls the Veo API.
+        It supports both image-to-video and text-to-video generation and handles
+        the asynchronous nature of the video generation operation.
+
+        Args:
+            project_id (str): The Google Cloud project ID.
+            location (str): The Google Cloud region.
+            model (str): The Veo 3 model to use.
+            prompt (str): The text prompt for the video.
+            first_frame (torch.Tensor, optional): The first frame of the video.
+            output_gcs_uri (str, optional): GCS URI to save the output video.
+            duration_seconds (int): The duration of the video in seconds.
+            resolution (str): The resolution of the video.
+            enhance_prompt (bool): Whether to enhance the prompt.
+            generate_audio (bool): Whether to generate audio for the video.
+            person_generation (str): The setting for person generation.
+            seed (int): The random seed for generation.
+
+        Returns:
+            tuple: A tuple containing the generated video as a VideoFromFile object.
+        """
         if self.client is None:
             self.client = genai.Client(vertexai=True, project=project_id, location=location)
 
+        # Configure the video generation parameters.
         config = {
             "number_of_videos": 1,
             "duration_seconds": duration_seconds,
@@ -84,6 +139,7 @@ class Veo3Node:
 
         config = types.GenerateVideosConfig(**config)
 
+        # Handle image-to-video generation if a first frame is provided.
         image_path = None
         if first_frame is not None:
             image_path = tensor_to_temp_image_file(first_frame)
@@ -96,6 +152,7 @@ class Veo3Node:
                 config=config,
             )
         else:
+            # Handle text-to-video generation.
             operation = await asyncio.to_thread(
                 self.client.models.generate_videos,
                 model=model,
@@ -103,6 +160,7 @@ class Veo3Node:
                 config=config,
             )
 
+        # Poll the operation until it is complete.
         while not operation.done:
             await asyncio.sleep(8)
             operation = await asyncio.to_thread(
@@ -116,20 +174,24 @@ class Veo3Node:
         if operation.error:
             raise ValueError(operation.error["message"])
 
+        # Process the response and return the video.
         if operation.response:
             if output_gcs_uri:
                 video_uri = operation.result.generated_videos[0].video.uri
                 
+                # Download the video from GCS.
                 storage_client = storage.Client(project=project_id)
                 bucket_name, blob_name = video_uri.replace("gs://", "").split("/", 1)
                 bucket = storage_client.bucket(bucket_name)
                 blob = bucket.blob(blob_name)
                 video_bytes = blob.download_as_bytes()
 
+                # Save the video for preview and return it as a VideoFromFile object.
                 video_preview = save_video_for_preview(video_bytes, folder_paths.get_temp_directory())
                 video_object = VideoFromFile(video_preview["full_path"])
                 return (video_object,)
             else:
+                # Handle videos returned directly as bytes.
                 video_paths = []
                 for i, video in enumerate(operation.result.generated_videos):
                     video_bytes = video.video.video_bytes
@@ -148,10 +210,21 @@ class Veo3Node:
 
 class Veo2Node:
     """
-    A custom node that calls the Veo 2 API to generate video from a prompt and an optional image.
+    A ComfyUI node for generating video using the Veo 2 API.
+
+    This node is tailored for the Veo 2 model, providing access to its specific
+    features and limitations. It allows for text-to-video and image-to-video
+    generation with options for aspect ratio and other parameters.
     """
     @classmethod
     def INPUT_TYPES(s):
+        """
+        Defines the input types for the Veo 2 node.
+
+        This includes required parameters like project ID, location, model, prompt,
+        and an output GCS URI. Optional inputs are available for the first frame,
+        duration, aspect ratio, and other settings.
+        """
         return {
             "required": {
                 "project_id": ("STRING", {
@@ -199,12 +272,40 @@ class Veo2Node:
     CATEGORY = "Vertex AI"
 
     def __init__(self):
+        """
+        Initializes the node by setting the client to None.
+        The client will be created on the first execution.
+        """
         self.client = None
 
     async def generate_video(self, project_id, location, model, prompt, output_gcs_uri, first_frame=None, duration_seconds=8, aspect_ratio="16:9", enhance_prompt=True, person_generation="allow_adult", seed=0):
+        """
+        Generates a video using the Veo 2 API.
+
+        This asynchronous method is similar to the Veo 3 version but is tailored
+        for the Veo 2 model. It handles the API call, polling for completion,
+        and processing the response to return the generated video.
+
+        Args:
+            project_id (str): The Google Cloud project ID.
+            location (str): The Google Cloud region.
+            model (str): The Veo 2 model to use.
+            prompt (str): The text prompt for the video.
+            output_gcs_uri (str): GCS URI to save the output video.
+            first_frame (torch.Tensor, optional): The first frame of the video.
+            duration_seconds (int): The duration of the video in seconds.
+            aspect_ratio (str): The aspect ratio of the video.
+            enhance_prompt (bool): Whether to enhance the prompt.
+            person_generation (str): The setting for person generation.
+            seed (int): The random seed for generation.
+
+        Returns:
+            tuple: A tuple containing the generated video as a VideoFromFile object.
+        """
         if self.client is None:
             self.client = genai.Client(vertexai=True, project=project_id, location=location)
 
+        # Configure the video generation parameters for Veo 2.
         config = {
             "number_of_videos": 1,
             "duration_seconds": duration_seconds,
@@ -219,6 +320,7 @@ class Veo2Node:
 
         config = types.GenerateVideosConfig(**config)
 
+        # Handle image-to-video generation if a first frame is provided.
         image_path = None
         if first_frame is not None:
             image_path = tensor_to_temp_image_file(first_frame)
@@ -230,6 +332,7 @@ class Veo2Node:
                 config=config,
             )
         else:
+            # Handle text-to-video generation.
             operation = await asyncio.to_thread(
                 self.client.models.generate_videos,
                 model=model,
@@ -237,6 +340,7 @@ class Veo2Node:
                 config=config,
             )
 
+        # Poll the operation until it is complete.
         while not operation.done:
             await asyncio.sleep(15)
             operation = await asyncio.to_thread(
@@ -250,20 +354,24 @@ class Veo2Node:
         if operation.error:
             raise ValueError(operation.error["message"])
 
+        # Process the response and return the video.
         if operation.response:
             if output_gcs_uri:
                 video_uri = operation.result.generated_videos[0].video.uri
                 
+                # Download the video from GCS.
                 storage_client = storage.Client(project=project_id)
                 bucket_name, blob_name = video_uri.replace("gs://", "").split("/", 1)
                 bucket = storage_client.bucket(bucket_name)
                 blob = bucket.blob(blob_name)
                 video_bytes = blob.download_as_bytes()
 
+                # Save the video for preview and return it.
                 video_preview = save_video_for_preview(video_bytes, folder_paths.get_temp_directory())
                 video_object = VideoFromFile(video_preview["full_path"])
                 return (video_object,)
             else:
+                # Handle videos returned directly as bytes.
                 video_bytes = operation.result.generated_videos[0].video.video_bytes
                 video_preview = save_video_for_preview(video_bytes, folder_paths.get_temp_directory())
                 video_object = VideoFromFile(video_preview["full_path"])
@@ -273,10 +381,20 @@ class Veo2Node:
 
 class VeoPromptWriterNode:
     """
-    A custom node that takes various video parameters and generates a detailed prompt for the Veo API.
+    A ComfyUI node that uses Gemini to generate a detailed video prompt for Veo.
+
+    This node takes various video parameters (subject, action, scene, etc.) and
+    uses the Gemini API to synthesize them into a single, effective prompt for
+    the Veo model. This helps users create more cinematic and detailed videos.
     """
     @classmethod
     def INPUT_TYPES(s):
+        """
+        Defines the input types for the Veo Prompt Writer node.
+
+        This includes required inputs for the subject, action, and scene, as well
+        as a wide range of optional parameters for camera work, style, and sound.
+        """
         return {
             "required": {
                 "project_id": ("STRING", {
@@ -321,12 +439,41 @@ class VeoPromptWriterNode:
     CATEGORY = "Vertex AI"
 
     def __init__(self):
+        """
+        Initializes the node by setting the client to None.
+        The client will be created on the first execution.
+        """
         self.client = None
 
     async def write_prompt(self, project_id, location, subject, action, scene, camera_angle="None", camera_movement="None", lens_effects="None", style="None", temporal_elements="None", sound_effects="None", dialogue=None):
+        """
+        Writes a detailed video prompt using the Gemini API.
+
+        This asynchronous method takes a set of keywords and uses Gemini to
+        generate a cohesive and cinematic prompt for the Veo model. It combines
+        all the provided elements into a single, effective instruction.
+
+        Args:
+            project_id (str): The Google Cloud project ID.
+            location (str): The Google Cloud region.
+            subject (str): The main subject of the video.
+            action (str): The action taking place.
+            scene (str): The setting of the video.
+            camera_angle (str, optional): The camera angle.
+            camera_movement (str, optional): The camera movement.
+            lens_effects (str, optional): Any lens effects.
+            style (str, optional): The artistic style of the video.
+            temporal_elements (str, optional): Any temporal effects.
+            sound_effects (str, optional): Any sound effects.
+            dialogue (str, optional): Any dialogue.
+
+        Returns:
+            tuple: A tuple containing the generated prompt string.
+        """
         if self.client is None:
             self.client = genai.Client(vertexai=True, project=project_id, location=location)
 
+        # Collect all the keywords for the prompt.
         keywords = [subject, action, scene]
         optional_keywords = [
             camera_angle,
@@ -342,15 +489,18 @@ class VeoPromptWriterNode:
         if dialogue:
             keywords.append(dialogue)
 
+        # Construct the prompt for Gemini to generate the Veo prompt.
         gemini_prompt = f"""
         You are an expert video prompt engineer for Google's Veo model. Your task is to construct the most effective and optimal prompt string using the following keywords. Every single keyword MUST be included. Synthesize them into a single, cohesive, and cinematic instruction. Do not add any new core concepts. Output ONLY the final prompt string, without any introduction or explanation. Mandatory Keywords: {",".join(keywords)}
         """
+        # Call the Gemini API to generate the prompt.
         response = await asyncio.to_thread(
             self.client.models.generate_content,
             model="gemini-2.5-flash",
             contents=gemini_prompt,
         )
 
+        # Return the generated prompt.
         return (response.text,)
 
 NODE_CLASS_MAPPINGS = {

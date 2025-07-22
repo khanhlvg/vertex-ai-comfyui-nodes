@@ -7,8 +7,8 @@ Custom nodes for ComfyUI that provide access to Google Cloud's Vertex AI generat
 *   **Gemini API**: For advanced language and multimodal tasks.
 *   **Imagen API**: For high-quality image generation and editing.
 *   **Veo API**: For state-of-the-art video generation.
-*   **Chirp API**: For speech-to-text and text-to-speech.
-*   **Lyria API**: For music generation.
+*   [Coming] **Chirp API**: For speech-to-text and text-to-speech.
+*   [Coming] **Lyria API**: For music generation.
 
 ## Setup
 

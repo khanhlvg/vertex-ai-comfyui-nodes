@@ -15,7 +15,6 @@ Custom nodes for ComfyUI that provide access to Google Cloud's Vertex AI generat
 You can install ComfyUI and the Vertex AI custom nodes with a single command. This script will check for dependencies, clone the necessary repositories, and guide you through the authentication process.
 
 ```bash
-cd ~/
 bash <(curl -s https://raw.githubusercontent.com/khanhlvg/vertex-ai-comfyui-nodes/main/scripts/install.sh)
 ```
 

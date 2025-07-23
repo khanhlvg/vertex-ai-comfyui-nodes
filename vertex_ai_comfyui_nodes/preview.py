@@ -2,31 +2,6 @@ import os
 import folder_paths
 import torchaudio
 
-class PreviewAudio:
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "audio": ("AUDIO",),
-            },
-        }
-
-    RETURN_TYPES = ()
-    FUNCTION = "preview"
-    OUTPUT_NODE = True
-    CATEGORY = "Vertex AI/Previews"
-
-    def preview(self, audio):
-        preview_dir = os.path.join(folder_paths.get_temp_directory(), "audio_previews")
-        os.makedirs(preview_dir, exist_ok=True)
-
-        audio_tensor = audio["waveform"]
-        sample_rate = audio["sample_rate"]
-        file_path = os.path.join(preview_dir, "temp_audio.wav")
-        torchaudio.save(file_path, audio_tensor, sample_rate)
-
-        return {"ui": {"audio": [{"filename": "temp_audio.wav", "subfolder": "audio_previews", "type": "temp"}]}}
-
 class PreviewVideo:
     """
     A ComfyUI node to display a video preview from a given file path.
@@ -108,10 +83,8 @@ class PreviewVideo:
 
 NODE_CLASS_MAPPINGS = {
     "PreviewVideo": PreviewVideo,
-    "PreviewAudio": PreviewAudio
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "PreviewVideo": "Preview Video by Path",
-    "PreviewAudio": "Preview Audio"
 }

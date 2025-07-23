@@ -157,3 +157,25 @@ def save_video_for_preview(video_bytes, output_dir, file_path=None):
                 "type": "output",
                 "full_path": temp_file.name
             }
+
+def save_audio_for_preview(audio_bytes, output_dir, file_name):
+    """
+    Saves audio data and prepares it for preview in ComfyUI.
+
+    Args:
+        audio_bytes (bytes): The audio data.
+        output_dir (str): The directory to save the audio in.
+        file_name (str): The name of the audio file.
+
+    Returns:
+        dict: A dictionary containing information for the ComfyUI previewer.
+    """
+    file_path = os.path.join(output_dir, file_name)
+    with open(file_path, "wb") as out_file:
+        out_file.write(audio_bytes)
+    return {
+        "filename": file_name,
+        "subfolder": "",
+        "type": "output",
+        "full_path": file_path
+    }

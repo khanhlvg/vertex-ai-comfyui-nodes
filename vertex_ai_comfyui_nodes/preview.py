@@ -1,19 +1,31 @@
-# Copyright 2025 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import os
 import folder_paths
+import torchaudio
+
+class PreviewAudio:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "audio": ("AUDIO",),
+            },
+        }
+
+    RETURN_TYPES = ()
+    FUNCTION = "preview"
+    OUTPUT_NODE = True
+    CATEGORY = "Vertex AI/Previews"
+
+    def preview(self, audio):
+        preview_dir = os.path.join(folder_paths.get_temp_directory(), "audio_previews")
+        os.makedirs(preview_dir, exist_ok=True)
+
+        audio_tensor = audio["waveform"]
+        sample_rate = audio["sample_rate"]
+        file_path = os.path.join(preview_dir, "temp_audio.wav")
+        torchaudio.save(file_path, audio_tensor, sample_rate)
+
+        return {"ui": {"audio": [{"filename": "temp_audio.wav", "subfolder": "audio_previews", "type": "temp"}]}}
 
 class PreviewVideo:
     """
@@ -95,9 +107,11 @@ class PreviewVideo:
         return {"ui": {"images": video_data, "animated": (True,)}}
 
 NODE_CLASS_MAPPINGS = {
-    "PreviewVideo": PreviewVideo
+    "PreviewVideo": PreviewVideo,
+    "PreviewAudio": PreviewAudio
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "PreviewVideo": "Preview Video by Path"
+    "PreviewVideo": "Preview Video by Path",
+    "PreviewAudio": "Preview Audio"
 }

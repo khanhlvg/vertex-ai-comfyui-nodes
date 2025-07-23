@@ -1,3 +1,17 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import requests
 import torch
 import numpy as np
@@ -15,13 +29,21 @@ from .utils import tensor_to_pil, pil_to_base64, base64_to_tensor
 
 class ImagenT2ICallerNode:
     """
-    A custom node that calls the Imagen API to generate images from a prompt.
+    A ComfyUI node for generating images from text prompts using the Google Imagen API.
+
+    This node provides a user-friendly interface within ComfyUI to access Imagen's
+    text-to-image capabilities. It supports various models, aspect ratios, and advanced
+    options like safety filtering and prompt enhancement.
     """
     # Define the input types for your node
     @classmethod
     def INPUT_TYPES(s):
         """
         Defines the input types for the Imagen node.
+
+        This method specifies all the parameters that users can configure in the
+        ComfyUI interface, such as the prompt, number of images, model selection,
+        and safety settings. Default values are provided for convenience.
         """
         return {
             "required": {
@@ -71,16 +93,42 @@ class ImagenT2ICallerNode:
     CATEGORY = "Vertex AI"
 
     def __init__(self):
+        """
+        Initializes the node by setting the client to None.
+        The client will be created on the first execution.
+        """
         self.client = None
 
     async def call_image_api(self, project_id, location, prompt, model, num_images, aspect_ratio, seed, safety_filter_level, person_generation, enhancePrompt):
         """
         This function is called when the node is executed.
         It sends the parameters to the specified API URL and returns the generated images.
+
+        This asynchronous method handles the entire process of calling the Imagen API.
+        It initializes the client, constructs the request with all the specified
+        parameters, and then processes the response to return the generated images
+        as a batch of tensors.
+
+        Args:
+            project_id (str): The Google Cloud project ID.
+            location (str): The Google Cloud region.
+            prompt (str): The text prompt for image generation.
+            model (str): The Imagen model to use.
+            num_images (int): The number of images to generate.
+            aspect_ratio (str): The desired aspect ratio of the images.
+            seed (int): The random seed for generation.
+            safety_filter_level (str): The safety filtering level.
+            person_generation (str): The setting for person generation.
+            enhancePrompt (bool): Whether to enhance the prompt.
+
+        Returns:
+            tuple: A tuple containing a batch of generated images as a torch.Tensor.
         """
+        # Initialize the Imagen client if it hasn't been already.
         if self.client is None:
             self.client = genai.Client(vertexai=True, project=project_id, location=location)
 
+        # Asynchronously call the Imagen API to generate images.
         api_response = await asyncio.to_thread(
             self.client.models.generate_images,
             model=model,
@@ -96,19 +144,24 @@ class ImagenT2ICallerNode:
             ),
         )
         
+        # If the API returns no images, print a message and return a dummy tensor.
         if not len(api_response.generated_images):
             print("API did not return any images.")
             # Return a black dummy image tensor to avoid crashing the workflow
             return (torch.zeros(1, 64, 64, 3, dtype=torch.float32),)
 
+        # Process the generated images and convert them to tensors.
         image_tensors = []
         for image in api_response.generated_images:
+            # Convert the returned image to a PIL Image in RGBA format.
             pil_image = image.image._pil_image.convert("RGBA")
+            # Convert the PIL image to a base64 string and then to a tensor.
             image_tensors.append(base64_to_tensor(pil_to_base64(pil_image)))
 
-        # Stack all tensors into a single batch tensor
+        # Stack all individual image tensors into a single batch tensor.
         batch_tensor = torch.cat(image_tensors, 0)
 
+        # Return the batch of images as a tuple.
         return (batch_tensor,)
 
 # A dictionary that ComfyUI uses to register the nodes in this file

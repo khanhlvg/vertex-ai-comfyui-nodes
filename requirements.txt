@@ -1,2 +1,7 @@
 google-cloud-aiplatform
 google-cloud-storage
+google-cloud-texttospeech
+google-genai
+torch
+torchaudio
+shortuuid

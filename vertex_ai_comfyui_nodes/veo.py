@@ -15,6 +15,7 @@
 import os
 import random
 import asyncio
+import uuid
 from google import genai
 from google.genai import types
 from google.cloud import storage
@@ -240,13 +241,14 @@ class Veo2Node:
                     "multiline": True,
                     "default": "A cinematic shot of a panda eating bamboo."
                 }),
+            },
+            "optional": {
+                "first_frame": ("IMAGE",),
+                "last_frame": ("IMAGE",),
                 "output_gcs_uri": ("STRING", {
                     "multiline": False,
                     "default": ""
                 }),
-            },
-            "optional": {
-                "first_frame": ("IMAGE",),
                 "duration_seconds": ("INT", {
                     "default": 8,
                     "min": 5,
@@ -278,7 +280,7 @@ class Veo2Node:
         """
         self.client = None
 
-    async def generate_video(self, project_id, location, model, prompt, output_gcs_uri, first_frame=None, duration_seconds=8, aspect_ratio="16:9", enhance_prompt=True, person_generation="allow_adult", seed=0):
+    async def generate_video(self, project_id, location, model, prompt, first_frame=None, last_frame=None, output_gcs_uri=None, duration_seconds=8, aspect_ratio="16:9", enhance_prompt=True, person_generation="allow_adult", seed=0):
         """
         Generates a video using the Veo 2 API.
 
@@ -291,8 +293,9 @@ class Veo2Node:
             location (str): The Google Cloud region.
             model (str): The Veo 2 model to use.
             prompt (str): The text prompt for the video.
-            output_gcs_uri (str): GCS URI to save the output video.
             first_frame (torch.Tensor, optional): The first frame of the video.
+            last_frame (torch.Tensor, optional): The last frame of the video.
+            output_gcs_uri (str, optional): GCS URI to save the output video.
             duration_seconds (int): The duration of the video in seconds.
             aspect_ratio (str): The aspect ratio of the video.
             enhance_prompt (bool): Whether to enhance the prompt.
@@ -318,6 +321,11 @@ class Veo2Node:
         if output_gcs_uri:
             config["output_gcs_uri"] = output_gcs_uri
 
+        last_frame_path = None
+        if last_frame is not None:
+            last_frame_path = tensor_to_temp_image_file(last_frame)
+            config["last_frame"] = types.Image.from_file(location=last_frame_path)
+
         config = types.GenerateVideosConfig(**config)
 
         # Handle image-to-video generation if a first frame is provided.
@@ -328,6 +336,7 @@ class Veo2Node:
             operation = await asyncio.to_thread(
                 self.client.models.generate_videos,
                 model=model,
+                prompt=prompt,
                 image=image_file,
                 config=config,
             )
@@ -350,6 +359,8 @@ class Veo2Node:
 
         if image_path:
             os.remove(image_path)
+        if last_frame_path:
+            os.remove(last_frame_path)
 
         if operation.error:
             raise ValueError(operation.error["message"])
@@ -372,6 +383,132 @@ class Veo2Node:
                 return (video_object,)
             else:
                 # Handle videos returned directly as bytes.
+                video_bytes = operation.result.generated_videos[0].video.video_bytes
+                video_preview = save_video_for_preview(video_bytes, folder_paths.get_temp_directory())
+                video_object = VideoFromFile(video_preview["full_path"])
+                return (video_object,)
+
+        return (None,)
+
+
+class Veo2Extend(Veo2Node):
+    """
+    A ComfyUI node for extending a video using the Veo 2 API.
+    """
+    @classmethod
+    def INPUT_TYPES(s):
+        """
+        Defines the input types for the Veo 2 Extend node.
+        """
+        return {
+            "required": {
+                "project_id": ("STRING", {
+                    "multiline": False,
+                    "default": os.environ.get("GOOGLE_CLOUD_PROJECT")
+                }),
+                "location": ("STRING", {
+                    "multiline": False,
+                    "default": os.environ.get("GOOGLE_CLOUD_REGION", "us-central1")
+                }),
+                "model": (["veo-2.0-generate-001"],),
+                "prompt": ("STRING", {
+                    "multiline": True,
+                    "default": "a butterfly flies in and lands on the flower"
+                }),
+                "video": (IO.VIDEO,),
+                "temp_gcs_prefix": ("STRING", {
+                    "multiline": False,
+                    "default": ""
+                }),
+                "output_gcs_uri": ("STRING", {
+                    "multiline": False,
+                    "default": ""
+                }),
+            },
+            "optional": {
+                "duration_seconds": ("INT", {
+                    "default": 7,
+                    "min": 4,
+                    "max": 7,
+                    "step": 1
+                }),
+                "aspect_ratio": (["16:9", "9:16"],),
+                "enhance_prompt": ("BOOLEAN", {"default": True}),
+                "person_generation": (["allow_adult", "dont_allow"],),
+                "seed": ("INT", {
+                    "default": random.randint(0, 4294967295),
+                    "min": 0,
+                    "max": 4294967295
+                }),
+            }
+        }
+
+    FUNCTION = "extend_video"
+
+    async def extend_video(self, project_id, location, model, prompt, video, temp_gcs_prefix, output_gcs_uri, duration_seconds=7, aspect_ratio="16:9", enhance_prompt=True, person_generation="allow_adult", seed=0):
+        if self.client is None:
+            self.client = genai.Client(vertexai=True, project=project_id, location=location)
+
+        storage_client = storage.Client(project=project_id)
+        bucket_name, prefix = temp_gcs_prefix.replace("gs://", "").split("/", 1)
+        
+        # Ensure the prefix ends with a slash to denote a folder
+        if not prefix.endswith("/"):
+            prefix += "/"
+            
+        file_name = f"{prefix}{uuid.uuid4()}.mp4"
+        
+        bucket = storage_client.bucket(bucket_name)
+        blob = bucket.blob(file_name)
+        blob.upload_from_filename(video.get_stream_source())
+        video_uri = f"gs://{bucket_name}/{file_name}"
+
+        config = {
+            "number_of_videos": 1,
+            "duration_seconds": duration_seconds,
+            "aspect_ratio": aspect_ratio,
+            "person_generation": person_generation,
+            "enhance_prompt": enhance_prompt,
+            "seed": seed,
+        }
+
+        if output_gcs_uri:
+            config["output_gcs_uri"] = output_gcs_uri
+
+        config = types.GenerateVideosConfig(**config)
+
+        operation = await asyncio.to_thread(
+            self.client.models.generate_videos,
+            model=model,
+            prompt=prompt,
+            video=types.Video(uri=video_uri),
+            config=config,
+        )
+
+        while not operation.done:
+            await asyncio.sleep(15)
+            operation = await asyncio.to_thread(
+                self.client.operations.get,
+                operation
+            )
+
+        if operation.error:
+            raise ValueError(operation.error["message"])
+
+        if operation.response:
+            if output_gcs_uri:
+                video_uri = operation.result.generated_videos[0].video.uri
+                
+                storage_client = storage.Client(project=project_id)
+                bucket_name, blob_name = video_uri.replace("gs://", "").split("/", 1)
+                bucket = storage_client.bucket(bucket_name)
+                blob = bucket.blob(blob_name)
+                video_bytes = blob.download_as_bytes()
+
+                video_preview = save_video_for_preview(video_bytes, folder_paths.get_temp_directory())
+                video_object = VideoFromFile(video_preview["full_path"])
+                return (video_object,)
+            else:
                 video_bytes = operation.result.generated_videos[0].video.video_bytes
                 video_preview = save_video_for_preview(video_bytes, folder_paths.get_temp_directory())
                 video_object = VideoFromFile(video_preview["full_path"])
@@ -490,9 +627,9 @@ class VeoPromptWriterNode:
             keywords.append(dialogue)
 
         # Construct the prompt for Gemini to generate the Veo prompt.
-        gemini_prompt = f"""
+        gemini_prompt = f'''
         You are an expert video prompt engineer for Google's Veo model. Your task is to construct the most effective and optimal prompt string using the following keywords. Every single keyword MUST be included. Synthesize them into a single, cohesive, and cinematic instruction. Do not add any new core concepts. Output ONLY the final prompt string, without any introduction or explanation. Mandatory Keywords: {",".join(keywords)}
-        """
+        '''
         # Call the Gemini API to generate the prompt.
         response = await asyncio.to_thread(
             self.client.models.generate_content,
@@ -504,13 +641,15 @@ class VeoPromptWriterNode:
         return (response.text,)
 
 NODE_CLASS_MAPPINGS = {
-    "Veo": Veo3Node,
+    "Veo3": Veo3Node,
     "Veo2": Veo2Node,
+    "Veo2Extend": Veo2Extend,
     "Veo_Prompt_Writer": VeoPromptWriterNode,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "Veo": "Veo 3",
-    "Veo2": "Veo 2",
+    "Veo3": "Veo 3 Video Generation",
+    "Veo2": "Veo 2 Video Generation",
+    "Veo2Extend": "Veo 2 Video Extend",
     "Veo_Prompt_Writer": "Veo Prompt Writer",
 }

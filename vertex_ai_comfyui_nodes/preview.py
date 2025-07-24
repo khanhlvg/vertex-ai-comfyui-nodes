@@ -1,6 +1,6 @@
 import os
 import folder_paths
-import torchaudio
+from comfy.comfy_types import IO
 
 class PreviewVideo:
     """
@@ -19,7 +19,7 @@ class PreviewVideo:
         """
         return {
             "required": {
-                "video_path": ("STRING", {"multiline": False, "default": ""}),
+                "video": (IO.VIDEO,),
             }
         }
 
@@ -28,7 +28,7 @@ class PreviewVideo:
     OUTPUT_NODE = True
     CATEGORY = "image/video"
 
-    def preview_video(self, video_path):
+    def preview_video(self, video):
         """
         Generates the data structure required by ComfyUI to display a video.
 
@@ -38,11 +38,12 @@ class PreviewVideo:
         can use to render the video preview.
 
         Args:
-            video_path (str): The absolute path to the video file.
+            video (VideoFromFile): The video object to preview.
 
         Returns:
             dict: A dictionary formatted for the ComfyUI frontend to display the video.
         """
+        video_path = video.get_stream_source()
         # If the path is invalid or doesn't exist, return an empty UI response.
         if not video_path or not os.path.exists(video_path):
             return {"ui": {"images": []}}
@@ -86,5 +87,5 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "PreviewVideo": "Preview Video by Path",
+    "PreviewVideo": "Preview Video",
 }

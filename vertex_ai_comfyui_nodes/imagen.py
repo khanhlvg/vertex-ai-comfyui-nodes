@@ -71,6 +71,7 @@ class ImagenT2ICallerNode:
                     "imagen-4.0-ultra-generate-preview-06-06", 
                     "imagen-4.0-fast-generate-preview-06-06", 
                     ],),
+                "image_size": (["1K", "2K"],),
                 "seed": ("INT", {
                     "default": random.randint(0, 4294967295),
                     "min": 0,
@@ -79,6 +80,7 @@ class ImagenT2ICallerNode:
                 "safety_filter_level": (["BLOCK_ONLY_HIGH", "BLOCK_MEDIUM_AND_ABOVE", "BLOCK_LOW_AND_ABOVE", "BLOCK_NONE"],),
                 "person_generation": (["ALLOW_ALL", "ALLOW_ADULT", "DONT_ALLOW"],),
                 "enhancePrompt": ("BOOLEAN", {"default": True}),
+                "output_mime_type": (["image/png", "image/jpeg"],),
             },
         }
 
@@ -99,7 +101,7 @@ class ImagenT2ICallerNode:
         """
         self.client = None
 
-    async def call_image_api(self, project_id, location, prompt, model, num_images, aspect_ratio, seed, safety_filter_level, person_generation, enhancePrompt):
+    async def call_image_api(self, project_id, location, prompt, model, num_images, aspect_ratio, seed, safety_filter_level, person_generation, enhancePrompt, image_size, output_mime_type):
         """
         This function is called when the node is executed.
         It sends the parameters to the specified API URL and returns the generated images.
@@ -120,6 +122,8 @@ class ImagenT2ICallerNode:
             safety_filter_level (str): The safety filtering level.
             person_generation (str): The setting for person generation.
             enhancePrompt (bool): Whether to enhance the prompt.
+            image_size (str): The resolution of the image, 1K or 2K.
+            output_mime_type (str): The output mime type of the image.
 
         Returns:
             tuple: A tuple containing a batch of generated images as a torch.Tensor.
@@ -128,36 +132,53 @@ class ImagenT2ICallerNode:
         if self.client is None:
             self.client = genai.Client(vertexai=True, project=project_id, location=location)
 
+        config_args = {
+            "aspect_ratio": aspect_ratio,
+            "number_of_images": num_images,
+            "seed": seed,
+            "safety_filter_level": safety_filter_level,
+            "person_generation": person_generation,
+            "enhance_prompt": enhancePrompt,
+            "add_watermark": False,
+            "output_mime_type": output_mime_type,
+            "include_rai_reason": True,
+        }
+
+        is_2K_supported = model.startswith("imagen-4.0-generate") or model.startswith("imagen-4.0-ultra-generate")
+
+        if is_2K_supported:
+            config_args["image_size"] = image_size
+        elif image_size != "1K":
+            raise ValueError(f"Image size '{image_size}' is not supported for model '{model}'. It is only supported for Imagen 4 and Imagen 4 Ultra.")
+
         # Asynchronously call the Imagen API to generate images.
         api_response = await asyncio.to_thread(
             self.client.models.generate_images,
             model=model,
             prompt=prompt,
-            config=types.GenerateImagesConfig(
-                aspect_ratio=aspect_ratio,
-                number_of_images=num_images,
-                seed=seed,
-                safety_filter_level=safety_filter_level,
-                person_generation=person_generation,
-                enhance_prompt=enhancePrompt,
-                add_watermark=False,
-            ),
+            config=types.GenerateImagesConfig(**config_args),
         )
         
-        # If the API returns no images, print a message and return a dummy tensor.
-        if not len(api_response.generated_images):
-            print("API did not return any images.")
-            # Return a black dummy image tensor to avoid crashing the workflow
-            return (torch.zeros(1, 64, 64, 3, dtype=torch.float32),)
-
         # Process the generated images and convert them to tensors.
         image_tensors = []
         for image in api_response.generated_images:
-            # Convert the returned image to a PIL Image in RGBA format.
-            pil_image = image.image._pil_image.convert("RGBA")
-            # Convert the PIL image to a base64 string and then to a tensor.
-            image_tensors.append(base64_to_tensor(pil_to_base64(pil_image)))
+            if not image.image.image_bytes:
+                print(f"No image returned by the API. Your request was likely blocked by the safety filters. Reason: {image.rai_filtered_reason}")
+                continue
+            try:
+                # Convert the returned image to a PIL Image in RGBA format.
+                pil_image = image.image._pil_image.convert("RGBA")
+                # Convert the PIL image to a base64 string and then to a tensor.
+                image_tensors.append(base64_to_tensor(pil_to_base64(pil_image)))
+            except (ValueError, AttributeError):
+                # This can happen if the image data is corrupted.
+                print("Skipping an image that could not be decoded.")
+                continue
 
+        # If no images were successfully processed, raise an error.
+        if not image_tensors:
+            raise ValueError("No valid images were returned by the API. Your request was likely blocked by the safety filters.")
+    
         # Stack all individual image tensors into a single batch tensor.
         batch_tensor = torch.cat(image_tensors, 0)
 
@@ -182,10 +203,11 @@ class ImagenMaskEditingNode:
                 "mask_dilation": ("FLOAT", {"default": -1, "min": -1, "max": 1.0, "step": 0.01}),
                 "seed": ("INT", {"default": random.randint(0, 4294967295), "min": 0, "max": 4294967295}),
                 "base_steps": ("INT", {"default": -1, "min": -1, "max": 100, "step": 1}),
-                "guidance_scale": ("FLOAT", {"default": -1, "min": -1, "max": 100.0, "step": 0.1}),
+                "guidance_scale": ("INT", {"default": -1, "min": -1, "max": 500, "step": 1}),
                 "number_of_images": ("INT", {"default": 1, "min": 1, "max": 4, "step": 1}),
                 "safety_filter_level": (["BLOCK_ONLY_HIGH", "BLOCK_MEDIUM_AND_ABOVE", "BLOCK_LOW_AND_ABOVE", "BLOCK_NONE"],),
                 "person_generation": (["ALLOW_ALL", "ALLOW_ADULT", "DONT_ALLOW"],),
+                "output_mime_type": (["image/png", "image/jpeg"],),
             }
         }
 
@@ -196,7 +218,7 @@ class ImagenMaskEditingNode:
     def __init__(self):
         self.client = None
 
-    async def edit_image(self, project_id, location, prompt, image, model, edit_mode, mask_dilation, seed, base_steps, guidance_scale, number_of_images, safety_filter_level, person_generation, mask=None, computed_mask=None):
+    async def edit_image(self, project_id, location, prompt, image, model, edit_mode, mask_dilation, seed, base_steps, guidance_scale, number_of_images, safety_filter_level, person_generation, output_mime_type="image/png", mask=None, computed_mask=None):
         if self.client is None:
             self.client = genai.Client(vertexai=True, project=project_id, location=location)
 
@@ -236,6 +258,7 @@ class ImagenMaskEditingNode:
             "seed": seed,
             "safety_filter_level": safety_filter_level,
             "person_generation": person_generation,
+            "output_mime_type": output_mime_type,
         }
         if base_steps != -1:
             config_args["base_steps"] = base_steps
@@ -256,8 +279,18 @@ class ImagenMaskEditingNode:
 
         image_tensors = []
         for image in edited_image.generated_images:
-            pil_image = image.image._pil_image.convert("RGBA")
-            image_tensors.append(base64_to_tensor(pil_to_base64(pil_image)))
+            if not image.image.image_bytes:
+                print(f"No image returned by the API. Your request was likely blocked by the safety filters. Reason: {image.rai_filtered_reason}")
+                continue
+            try:
+                pil_image = image.image._pil_image.convert("RGBA")
+                image_tensors.append(base64_to_tensor(pil_to_base64(pil_image)))
+            except (ValueError, AttributeError):
+                print("Skipping an image that could not be decoded.")
+                continue
+        
+        if not image_tensors:
+            raise ValueError("No valid images were returned by the API. Your request was likely blocked by the safety filters.")
 
         batch_tensor = torch.cat(image_tensors, 0)
         return (batch_tensor,)
@@ -362,5 +395,5 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "Imagen_T2I": "Imagen Text-to-Image",
     "ImagenMaskEditing": "Imagen Mask Editing",
-    "ImagenComputedMaskConfig": "Imagen Computed Mask Config",
+    "ImagenComputedMaskConfig": "Imagen Compute Mask",
 }

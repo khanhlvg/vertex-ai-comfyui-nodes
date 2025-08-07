@@ -65,11 +65,12 @@ class Veo3Node:
                 }),
                 "duration_seconds": ("INT", {
                     "default": 8,
-                    "min": 1,
-                    "max": 16,
+                    "min": 8,
+                    "max": 8,
                     "step": 1
                 }),
                 "resolution": (["1080p", "720p"],),
+                "compression_quality": (["OPTIMIZED", "LOSSLESS"],),
                 "enhance_prompt": ("BOOLEAN", {"default": True}),
                 "generate_audio": ("BOOLEAN", {"default": True}),
                 "person_generation": (["allow_adult", "dont_allow", "allow_all"],),
@@ -95,7 +96,7 @@ class Veo3Node:
         """
         self.client = None
 
-    async def generate_video(self, project_id, location, model, prompt, first_frame=None, output_gcs_uri=None, duration_seconds=8, resolution="1080p", enhance_prompt=True, generate_audio=True, person_generation="allow_adult", seed=0):
+    async def generate_video(self, project_id, location, model, prompt, first_frame=None, output_gcs_uri=None, duration_seconds=8, resolution="1080p", compression_quality="OPTIMIZED", enhance_prompt=True, generate_audio=True, person_generation="allow_adult", seed=0):
         """
         Generates a video using the Veo 3 API.
 
@@ -113,6 +114,7 @@ class Veo3Node:
             output_gcs_uri (str, optional): GCS URI to save the output video.
             duration_seconds (int): The duration of the video in seconds.
             resolution (str): The resolution of the video.
+            compression_quality (str): The compression quality of the video.
             enhance_prompt (bool): Whether to enhance the prompt.
             generate_audio (bool): Whether to generate audio for the video.
             person_generation (str): The setting for person generation.
@@ -134,6 +136,11 @@ class Veo3Node:
             "generate_audio": generate_audio,
             "seed": seed,
         }
+
+        if compression_quality == "LOSSLESS":
+            config["compression_quality"] = types.VideoCompressionQuality.LOSSLESS
+        else:
+            config["compression_quality"] = types.VideoCompressionQuality.OPTIMIZED
 
         if output_gcs_uri:
             config["output_gcs_uri"] = output_gcs_uri

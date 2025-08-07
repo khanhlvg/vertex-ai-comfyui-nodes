@@ -423,7 +423,7 @@ class Veo2Extend(Veo2Node):
                     "default": "a butterfly flies in and lands on the flower"
                 }),
                 "video": (IO.VIDEO,),
-                "temp_gcs_prefix": ("STRING", {
+                "temp_gcs_prefix_for_input_video": ("STRING", {
                     "multiline": False,
                     "default": ""
                 }),
@@ -452,12 +452,12 @@ class Veo2Extend(Veo2Node):
 
     FUNCTION = "extend_video"
 
-    async def extend_video(self, project_id, location, model, prompt, video, temp_gcs_prefix, output_gcs_uri, duration_seconds=7, aspect_ratio="16:9", enhance_prompt=True, person_generation="allow_adult", seed=0):
+    async def extend_video(self, project_id, location, model, prompt, video, temp_gcs_prefix_for_input_video, output_gcs_uri, duration_seconds=7, aspect_ratio="16:9", enhance_prompt=True, person_generation="allow_adult", seed=0):
         if self.client is None:
             self.client = genai.Client(vertexai=True, project=project_id, location=location)
 
         storage_client = storage.Client(project=project_id)
-        bucket_name, prefix = temp_gcs_prefix.replace("gs://", "").split("/", 1)
+        bucket_name, prefix = temp_gcs_prefix_for_input_video.replace("gs://", "").split("/", 1)
         
         # Ensure the prefix ends with a slash to denote a folder
         if not prefix.endswith("/"):

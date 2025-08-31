@@ -49,6 +49,7 @@ class ImagenProductRecontextNode:
                     "multiline": False,
                     "default": os.environ.get("GOOGLE_CLOUD_REGION", "us-central1")
                 }),
+                "model": (["imagen-product-recontext-preview-06-30"],),
                 "prompt": ("STRING", {
                     "multiline": True,
                     "default": "A product photo of a car on a race track."
@@ -87,7 +88,7 @@ class ImagenProductRecontextNode:
     def __init__(self):
         self.client = None
 
-    async def generate_contextualized_image(self, project_id, location, prompt, image1, image2=None, image3=None, productDescription=None, sampleCount=1, seed=0, safetySetting="BLOCK_LOW_AND_ABOVE", personGeneration="ALLOW_ADULT"):
+    async def generate_contextualized_image(self, project_id, location, model, prompt, image1, image2=None, image3=None, productDescription=None, sampleCount=1, seed=0, safetySetting="BLOCK_LOW_AND_ABOVE", personGeneration="ALLOW_ADULT"):
         """
         Generates a new image by placing the input product(s) in a new context.
 
@@ -136,8 +137,6 @@ class ImagenProductRecontextNode:
             seed=seed,
             add_watermark=False
         )
-
-        model = "imagen-product-recontext-preview-06-30"
 
         response = await asyncio.to_thread(
             self.client.models.recontext_image,
@@ -195,6 +194,7 @@ class VirtualTryOnNode:
                     "multiline": False,
                     "default": os.environ.get("GOOGLE_CLOUD_REGION", "us-central1")
                 }),
+                "model": (["virtual-try-on-preview-08-04"],),
                 "person_image": ("IMAGE",),
                 "product_image": ("IMAGE",),
             },
@@ -225,7 +225,7 @@ class VirtualTryOnNode:
     def __init__(self):
         self.client = None
 
-    async def virtual_try_on(self, project_id, location, person_image, product_image, sampleCount=1, seed=0, safetySetting="BLOCK_LOW_AND_ABOVE", personGeneration="ALLOW_ADULT"):
+    async def virtual_try_on(self, project_id, location, model, person_image, product_image, sampleCount=1, seed=0, safetySetting="BLOCK_LOW_AND_ABOVE", personGeneration="ALLOW_ADULT"):
         """
         Performs the virtual try-on by combining a person and a product image.
 
@@ -266,8 +266,6 @@ class VirtualTryOnNode:
             seed=seed,
             add_watermark=False
         )
-
-        model = "virtual-try-on-preview-08-04"
 
         response = await asyncio.to_thread(
             self.client.models.recontext_image,

@@ -61,12 +61,6 @@ class GeminiImageNode:
                     "default": "A beautiful landscape painting."
                 }),
                 "model_name": (["gemini-2.5-flash-image-preview"],),
-                "num_images": ("INT", {
-                    "default": 1,
-                    "min": 1,
-                    "max": 4,
-                    "step": 1
-                }),
                 "seed": ("INT", {
                     "default": random.randint(0, 2147483647),
                     "min": 0,
@@ -88,7 +82,7 @@ class GeminiImageNode:
     FUNCTION = "generate_image"
     CATEGORY = "Vertex AI"
 
-    async def generate_image(self, project_id, location, prompt, model_name, num_images, seed,
+    async def generate_image(self, project_id, location, prompt, model_name, seed,
                              image1=None, image2=None, image3=None, image4=None,
                              image5=None, image6=None):
         """
@@ -112,7 +106,7 @@ class GeminiImageNode:
 
         config = types.GenerateContentConfig(
             response_modalities=["TEXT", "IMAGE"],
-            candidate_count=num_images,
+            candidate_count=1,
             seed=seed,
         )
 

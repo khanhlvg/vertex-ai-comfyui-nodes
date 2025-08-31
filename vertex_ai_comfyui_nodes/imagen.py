@@ -64,9 +64,9 @@ class ImagenT2ICallerNode:
                 }),
                 "aspect_ratio": (["1:1", "16:9", "9:16", "4:3", "3:4"],),
                 "model": ([
-                    "imagen-4.0-generate-preview-06-06",
-                    "imagen-4.0-ultra-generate-preview-06-06",
-                    "imagen-4.0-fast-generate-preview-06-06",
+                    "imagen-4.0-generate-001",
+                    "imagen-4.0-ultra-generate-001",
+                    "imagen-4.0-fast-generate-001",
                     ],),
                 "image_size": (["1K", "2K"],),
                 "seed": ("INT", {

@@ -19,10 +19,12 @@ import numpy as np
 from PIL import Image
 import base64
 import io
-from google.cloud import aiplatform
 import asyncio
 
-from .utils import tensor_to_pil, pil_to_base64, base64_to_tensor
+from google import genai
+from google.genai import types
+
+from .utils import tensor_to_pil, pil_to_base64, base64_to_tensor, tensor_to_temp_image_file
 
 class ImagenProductRecontextNode:
     """
@@ -86,12 +88,15 @@ class ImagenProductRecontextNode:
 
     CATEGORY = "Vertex AI"
 
-    async def generate_contextualized_image(self, project_id, location, prompt, image1, image2=None, image3=None, productDescription=None, sampleCount=1, seed=0, safetySetting="block_low_and_above", personGeneration="allow_adult"):
+    def __init__(self):
+        self.client = None
+
+    async def generate_contextualized_image(self, project_id, location, prompt, image1, image2=None, image3=None, productDescription=None, sampleCount=1, seed=0, safetySetting="BLOCK_LOW_AND_ABOVE", personGeneration="ALLOW_ADULT"):
         """
         Generates a new image by placing the input product(s) in a new context.
 
-        This asynchronous method initializes the AI Platform client, prepares the
-        input images and parameters, and calls the prediction endpoint for the
+        This asynchronous method initializes the genai.Client, prepares the
+        input images and parameters, and calls the recontext_image method for the
         Imagen product re-contextualization model. The resulting images are
         returned as a tensor batch.
 
@@ -111,60 +116,60 @@ class ImagenProductRecontextNode:
         Returns:
             tuple: A tuple containing a batch of generated images as a torch.Tensor.
         """
-        aiplatform.init(project=project_id, location=location)
-        api_regional_endpoint = f"{location}-aiplatform.googleapis.com"
-        client_options = {"api_endpoint": api_regional_endpoint}
-        client = aiplatform.gapic.PredictionServiceClient(client_options=client_options)
+        if self.client is None:
+            self.client = genai.Client(vertexai=True, project=project_id, location=location)
 
-        # Collect and process all provided images.
         images = [image1, image2, image3]
-        image_bytes_list = []
+        product_images = []
+        temp_files = []
         for img_tensor in images:
             if img_tensor is not None:
-                pil_img = tensor_to_pil(img_tensor)
-                base64_img = pil_to_base64(pil_img)
-                image_bytes_list.append(base64_img)
+                temp_path = tensor_to_temp_image_file(img_tensor)
+                product_images.append(types.ProductImage(product_image=types.Image.from_file(location=temp_path)))
+                temp_files.append(temp_path)
 
-        # Construct the instance payload for the API request.
-        instances = []
-        instance = {"productImages": []}
-        for product_image_bytes in image_bytes_list:
-            product_image = {"image": {"bytesBase64Encoded": product_image_bytes}}
-            instance["productImages"].append(product_image)
+        source = types.RecontextImageSource(
+            prompt=prompt,
+            product_images=product_images,
+        )
 
-        if productDescription:
-            instance["productImages"][0]["productConfig"] = {
-                "productDescription": productDescription
-            }
+        config = types.RecontextImageConfig(
+            number_of_images=sampleCount,
+            safety_filter_level=safetySetting,
+            person_generation=personGeneration,
+            seed=seed,
+            add_watermark=False
+        )
 
-        if prompt:
-            instance["prompt"] = prompt
+        model = "imagen-product-recontext-preview-06-30"
 
-        # Set the generation parameters.
-        parameters = {"sampleCount": sampleCount, "seed": seed}
-        if safetySetting:
-            parameters["safetySetting"] = safetySetting
-        if personGeneration:
-            parameters["personGeneration"] = personGeneration
+        response = await asyncio.to_thread(
+            self.client.models.recontext_image,
+            model=model,
+            source=source,
+            config=config,
+        )
 
-        instances.append(instance)
+        for temp_path in temp_files:
+            os.remove(temp_path)
 
-        # Define the model endpoint and make the prediction call.
-        model_endpoint = f"projects/{project_id}/locations/{location}/publishers/google/models/imagen-product-recontext-preview-06-30"
-        response = await asyncio.to_thread(client.predict, endpoint=model_endpoint, instances=instances, parameters=parameters)
-
-        # Process the response and convert the base64 images to tensors.
         image_tensors = []
-        for prediction in response.predictions:
-            base64_image = prediction["bytesBase64Encoded"]
-            image_tensors.append(base64_to_tensor(base64_image))
+        for image in response.generated_images:
+            if not image.image.image_bytes:
+                print(f"No image returned by the API. Your request was likely blocked by the safety filters.")
+                continue
+            try:
+                pil_image = image.image._pil_image.convert("RGBA")
+                image_tensors.append(base64_to_tensor(pil_to_base64(pil_image)))
+            except (ValueError, AttributeError):
+                print("Skipping an image that could not be decoded.")
+                continue
 
-        # If no images are returned, provide a dummy tensor.
         if not image_tensors:
+            # If no images are returned, provide a dummy tensor.
             print("API did not return any images.")
             return (torch.zeros(1, 64, 64, 3, dtype=torch.float32),)
 
-        # Combine the individual tensors into a single batch and return.
         batch_tensor = torch.cat(image_tensors, 0)
         return (batch_tensor,)
 
@@ -221,12 +226,15 @@ class VirtualTryOnNode:
 
     CATEGORY = "Vertex AI"
 
-    async def virtual_try_on(self, project_id, location, person_image, product_image, sampleCount=1, seed=0, safetySetting="block_low_and_above", personGeneration="allow_adult"):
+    def __init__(self):
+        self.client = None
+
+    async def virtual_try_on(self, project_id, location, person_image, product_image, sampleCount=1, seed=0, safetySetting="BLOCK_LOW_AND_ABOVE", personGeneration="ALLOW_ADULT"):
         """
         Performs the virtual try-on by combining a person and a product image.
 
-        This asynchronous method sets up the AI Platform client, processes the
-        input person and product images, and calls the prediction endpoint for the
+        This asynchronous method sets up the genai.Client, processes the
+        input person and product images, and calls the recontext_image method for the
         virtual try-on model. The generated images are returned as a tensor batch.
 
         Args:
@@ -242,49 +250,56 @@ class VirtualTryOnNode:
         Returns:
             tuple: A tuple containing a batch of generated images as a torch.Tensor.
         """
-        aiplatform.init(project=project_id, location=location)
-        api_regional_endpoint = f"{location}-aiplatform.googleapis.com"
-        client_options = {"api_endpoint": api_regional_endpoint}
-        client = aiplatform.gapic.PredictionServiceClient(client_options=client_options)
+        if self.client is None:
+            self.client = genai.Client(vertexai=True, project=project_id, location=location)
 
-        # Convert the input tensors to PIL images and then to base64 strings.
-        person_pil = tensor_to_pil(person_image)
-        product_pil = tensor_to_pil(product_image)
+        person_image_path = tensor_to_temp_image_file(person_image)
+        product_image_path = tensor_to_temp_image_file(product_image)
 
-        person_b64 = pil_to_base64(person_pil)
-        product_b64 = pil_to_base64(product_pil)
+        source = types.RecontextImageSource(
+            person_image=types.Image.from_file(location=person_image_path),
+            product_images=[
+                types.ProductImage(product_image=types.Image.from_file(location=product_image_path))
+            ],
+        )
 
-        # Construct the instance payload for the API request.
-        instances = [
-            {
-                "personImage": {"image": {"bytesBase64Encoded": person_b64}},
-                "productImages": [{"image": {"bytesBase64Encoded": product_b64}}],
-            }
-        ]
+        config = types.RecontextImageConfig(
+            number_of_images=sampleCount,
+            safety_filter_level=safetySetting,
+            person_generation=personGeneration,
+            seed=seed,
+            add_watermark=False
+        )
 
-        # Set the generation parameters.
-        parameters = {"sampleCount": sampleCount, "seed": seed}
-        if safetySetting:
-            parameters["safetySetting"] = safetySetting
-        if personGeneration:
-            parameters["personGeneration"] = personGeneration
+        model = "virtual-try-on-preview-08-04"
 
-        # Define the model endpoint and make the prediction call.
-        model_endpoint = f"projects/{project_id}/locations/{location}/publishers/google/models/virtual-try-on-exp-05-31"
-        response = await asyncio.to_thread(client.predict, endpoint=model_endpoint, instances=instances, parameters=parameters)
+        response = await asyncio.to_thread(
+            self.client.models.recontext_image,
+            model=model,
+            source=source,
+            config=config,
+        )
 
-        # Process the response and convert the base64 images to tensors.
+        os.remove(person_image_path)
+        os.remove(product_image_path)
+
         image_tensors = []
-        for prediction in response.predictions:
-            base64_image = prediction["bytesBase64Encoded"]
-            image_tensors.append(base64_to_tensor(base64_image))
+        for image in response.generated_images:
+            if not image.image.image_bytes:
+                print(f"No image returned by the API. Your request was likely blocked by the safety filters.")
+                continue
+            try:
+                pil_image = image.image._pil_image.convert("RGBA")
+                image_tensors.append(base64_to_tensor(pil_to_base64(pil_image)))
+            except (ValueError, AttributeError):
+                print("Skipping an image that could not be decoded.")
+                continue
 
-        # If no images are returned, provide a dummy tensor.
         if not image_tensors:
+            # If no images are returned, provide a dummy tensor.
             print("API did not return any images.")
             return (torch.zeros(1, 64, 64, 3, dtype=torch.float32),)
 
-        # Combine the individual tensors into a single batch and return.
         batch_tensor = torch.cat(image_tensors, 0)
         return (batch_tensor,)
 

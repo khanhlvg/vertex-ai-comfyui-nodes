@@ -194,7 +194,7 @@ class ImagenMaskEditingNode:
                 "location": ("STRING", {"multiline": False, "default": os.environ.get("GOOGLE_CLOUD_REGION", "us-central1")}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
                 "image": ("IMAGE",),
-                "model": (["imagen-3.0-capability-001"],),
+                "model": (["imagen-3.0-capability-001", "imagen-3.0-capability-002"],),
                 "edit_mode": (["EDIT_MODE_INPAINT_REMOVAL", "EDIT_MODE_INPAINT_INSERTION", "EDIT_MODE_BGSWAP", "EDIT_MODE_OUTPAINT"],),
             },
             "optional": {

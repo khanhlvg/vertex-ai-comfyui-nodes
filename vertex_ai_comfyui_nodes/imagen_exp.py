@@ -15,16 +15,12 @@
 import os
 import random
 import torch
-import numpy as np
-from PIL import Image
-import base64
-import io
 import asyncio
 
 from google import genai
 from google.genai import types
 
-from .utils import tensor_to_pil, pil_to_base64, base64_to_tensor, tensor_to_temp_image_file
+from .utils import pil_to_base64, base64_to_tensor, tensor_to_temp_image_file
 
 class ImagenProductRecontextNode:
     """
@@ -156,7 +152,7 @@ class ImagenProductRecontextNode:
         image_tensors = []
         for image in response.generated_images:
             if not image.image.image_bytes:
-                print(f"No image returned by the API. Your request was likely blocked by the safety filters.")
+                print("No image returned by the API. Your request was likely blocked by the safety filters.")
                 continue
             try:
                 pil_image = image.image._pil_image.convert("RGBA")
@@ -286,7 +282,7 @@ class VirtualTryOnNode:
         image_tensors = []
         for image in response.generated_images:
             if not image.image.image_bytes:
-                print(f"No image returned by the API. Your request was likely blocked by the safety filters.")
+                print("No image returned by the API. Your request was likely blocked by the safety filters.")
                 continue
             try:
                 pil_image = image.image._pil_image.convert("RGBA")

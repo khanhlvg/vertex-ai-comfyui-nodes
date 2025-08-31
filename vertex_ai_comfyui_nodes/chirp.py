@@ -169,10 +169,10 @@ class ChirpNode:
 
         # Load the audio file into a tensor.
         audio_tensor, sample_rate = torchaudio.load(file_path)
-        
+
         # Add a batch dimension to the tensor.
         audio_tensor = audio_tensor.unsqueeze(0)
-        
+
         # Return the audio data in the ComfyUI AUDIO format.
         return ({"waveform": audio_tensor, "sample_rate": sample_rate},)
 

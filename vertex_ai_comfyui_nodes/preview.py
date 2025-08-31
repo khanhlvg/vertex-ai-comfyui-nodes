@@ -50,12 +50,12 @@ class PreviewVideo:
 
         # Extract the filename from the path.
         filename = os.path.basename(video_path)
-        
+
         # Get the standard ComfyUI directory paths.
         output_dir = folder_paths.get_output_directory()
         input_dir = folder_paths.get_input_directory()
         temp_dir = folder_paths.get_temp_directory()
-        
+
         # Determine the directory of the video file.
         file_dir = os.path.dirname(video_path)
 
@@ -72,7 +72,7 @@ class PreviewVideo:
         elif file_dir.startswith(temp_dir):
             subfolder = os.path.relpath(file_dir, temp_dir)
             type = "temp"
-        
+
         # Normalize the subfolder path.
         if subfolder == ".":
             subfolder = ""

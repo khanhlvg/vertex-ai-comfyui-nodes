@@ -13,9 +13,6 @@
 # limitations under the License.
 
 import os
-import torch
-import numpy as np
-from PIL import Image
 from google import genai
 from google.genai import types
 from google.genai.types import Part
@@ -59,7 +56,7 @@ class GeminiCallerNode:
                 "model_name": ([
                     'gemini-2.5-flash',
                     'gemini-2.5-pro',
-                    'gemini-2.5-flash-lite-preview-06-17',                    
+                    'gemini-2.5-flash-lite-preview-06-17',
                     'gemini-2.0-flash',
                     'gemini-2.0-flash-lite',
                 ],),
@@ -108,7 +105,7 @@ class GeminiCallerNode:
         # Initialize the Gemini client if it hasn't been already.
         if self.client is None:
             self.client = genai.Client(vertexai=True, project=project_id, location=region)
-        
+
         # Create a generation configuration if a system instruction is provided.
         config = types.GenerateContentConfig(
             system_instruction=system_instruction
@@ -117,7 +114,7 @@ class GeminiCallerNode:
         # Prepare the contents of the request, starting with the text prompt.
         contents = [prompt]
         images = [image1, image2, image3]
-        
+
         # Process and add any provided images to the request contents.
         for img_tensor in images:
             if img_tensor is not None:

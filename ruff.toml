@@ -1,0 +1,3 @@
+[lint]
+# Ignore T201 errors (print statements)
+ignore = ["T201"]

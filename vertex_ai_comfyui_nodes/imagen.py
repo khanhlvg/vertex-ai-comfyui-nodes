@@ -12,12 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import requests
 import torch
 import numpy as np
 from PIL import Image
-import base64
-import io
 import os
 import random
 import asyncio
@@ -25,7 +22,7 @@ import asyncio
 from google import genai
 from google.genai import types
 
-from .utils import tensor_to_pil, pil_to_base64, base64_to_tensor, tensor_to_temp_image_file
+from .utils import pil_to_base64, base64_to_tensor, tensor_to_temp_image_file
 
 class ImagenT2ICallerNode:
     """
@@ -67,9 +64,9 @@ class ImagenT2ICallerNode:
                 }),
                 "aspect_ratio": (["1:1", "16:9", "9:16", "4:3", "3:4"],),
                 "model": ([
-                    "imagen-4.0-generate-preview-06-06", 
-                    "imagen-4.0-ultra-generate-preview-06-06", 
-                    "imagen-4.0-fast-generate-preview-06-06", 
+                    "imagen-4.0-generate-preview-06-06",
+                    "imagen-4.0-ultra-generate-preview-06-06",
+                    "imagen-4.0-fast-generate-preview-06-06",
                     ],),
                 "image_size": (["1K", "2K"],),
                 "seed": ("INT", {
@@ -158,7 +155,7 @@ class ImagenT2ICallerNode:
             prompt=prompt,
             config=types.GenerateImagesConfig(**config_args),
         )
-        
+
         # Process the generated images and convert them to tensors.
         image_tensors = []
         for image in api_response.generated_images:
@@ -178,7 +175,7 @@ class ImagenT2ICallerNode:
         # If no images were successfully processed, raise an error.
         if not image_tensors:
             raise ValueError("No valid images were returned by the API. Your request was likely blocked by the safety filters.")
-    
+
         # Stack all individual image tensors into a single batch tensor.
         batch_tensor = torch.cat(image_tensors, 0)
 
@@ -237,7 +234,7 @@ class ImagenMaskEditingNode:
             mask_pil = Image.fromarray((mask_tensor.numpy() * 255).astype(np.uint8), 'L')
             mask_pil = mask_pil.point(lambda p: 255 if p > 127 else 0)
             mask_path = tensor_to_temp_image_file(torch.from_numpy(np.array(mask_pil)).unsqueeze(0).unsqueeze(-1).repeat(1, 1, 1, 3).float() / 255.0)
-            
+
             mask_config_args = {"mask_mode": "MASK_MODE_USER_PROVIDED"}
             if mask_dilation != -1:
                 mask_config_args["mask_dilation"] = mask_dilation
@@ -288,7 +285,7 @@ class ImagenMaskEditingNode:
             except (ValueError, AttributeError):
                 print("Skipping an image that could not be decoded.")
                 continue
-        
+
         if not image_tensors:
             raise ValueError("No valid images were returned by the API. Your request was likely blocked by the safety filters.")
 

@@ -16,8 +16,6 @@ import unittest
 import os
 import sys
 import asyncio
-import torch
-from PIL import Image
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 

@@ -19,7 +19,7 @@ import uuid
 from google import genai
 from google.genai import types
 from google.cloud import storage
-from .utils import tensor_to_temp_image_file, save_video, save_video_for_preview
+from .utils import tensor_to_temp_image_file, save_video_for_preview
 import folder_paths
 from comfy.comfy_types import IO
 from comfy_api.input_impl import VideoFromFile
@@ -186,7 +186,7 @@ class Veo3Node:
         if operation.response:
             if output_gcs_uri:
                 video_uri = operation.result.generated_videos[0].video.uri
-                
+
                 # Download the video from GCS.
                 storage_client = storage.Client(project=project_id)
                 bucket_name, blob_name = video_uri.replace("gs://", "").split("/", 1)
@@ -207,7 +207,7 @@ class Veo3Node:
                     video_paths.append(video_preview["full_path"])
 
                 video_file_path = video_paths[0] if video_paths else None
-                
+
                 if not video_file_path:
                     return (None,)
 
@@ -376,7 +376,7 @@ class Veo2Node:
         if operation.response:
             if output_gcs_uri:
                 video_uri = operation.result.generated_videos[0].video.uri
-                
+
                 # Download the video from GCS.
                 storage_client = storage.Client(project=project_id)
                 bucket_name, blob_name = video_uri.replace("gs://", "").split("/", 1)
@@ -458,13 +458,13 @@ class Veo2Extend(Veo2Node):
 
         storage_client = storage.Client(project=project_id)
         bucket_name, prefix = temp_gcs_prefix_for_input_video.replace("gs://", "").split("/", 1)
-        
+
         # Ensure the prefix ends with a slash to denote a folder
         if not prefix.endswith("/"):
             prefix += "/"
-            
+
         file_name = f"{prefix}{uuid.uuid4()}.mp4"
-        
+
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(file_name)
         blob.upload_from_filename(video.get_stream_source())
@@ -505,7 +505,7 @@ class Veo2Extend(Veo2Node):
         if operation.response:
             if output_gcs_uri:
                 video_uri = operation.result.generated_videos[0].video.uri
-                
+
                 storage_client = storage.Client(project=project_id)
                 bucket_name, blob_name = video_uri.replace("gs://", "").split("/", 1)
                 bucket = storage_client.bucket(bucket_name)
